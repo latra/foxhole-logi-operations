@@ -1,0 +1,14 @@
+app:
+  name: "FastAPI Backend"
+
+database:
+  type: "postgresql"
+  host: "localhost"
+  port: 5432
+  database: "postgres"
+
+auth:
+  access_token_expire_minutes: 3200
+
+google:
+  enabled: true
