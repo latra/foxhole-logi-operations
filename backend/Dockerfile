@@ -7,7 +7,7 @@ WORKDIR /code
 COPY ./pyproject.toml /code/pyproject.toml
 COPY ./README.md /code/README.md
 COPY ./api /code/api
-
+COPY create_dev_token.py /code/create_dev_token.py
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir . \
     && pip install --no-cache-dir ".[postgres]"
