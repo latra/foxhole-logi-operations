@@ -23,10 +23,23 @@ async def discord_login():
 
 
 @router.get("/discord/callback", summary="Discord OAuth callback → redirect to frontend")
-async def discord_callback(code: str, db: AsyncSession = Depends(get_db)):
-    token_response = await discord_auth_service.handle_callback(db, code)
-    redirect_url = f"{settings.frontend.url}/login?token={token_response.access_token}"
-    return RedirectResponse(redirect_url)
+async def discord_callback(
+    code: str | None = None,
+    error: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    if error or not code:
+        query = urlencode({"error": error or "access_denied"})
+        return RedirectResponse(f"{settings.frontend.url}/login?{query}")
+
+    try:
+        token_response = await discord_auth_service.handle_callback(db, code)
+    except Exception:
+        query = urlencode({"error": "discord_auth_failed"})
+        return RedirectResponse(f"{settings.frontend.url}/login?{query}")
+
+    query = urlencode({"token": token_response.access_token})
+    return RedirectResponse(f"{settings.frontend.url}/login?{query}")
 
 
 @router.get("/me", response_model=UserResponse)
