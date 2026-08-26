@@ -30,6 +30,8 @@ interface UseMapSessionReturn {
   /** Connect to an existing session by code. */
   joinSession: (code: string) => void;
   broadcastShape: (shape: MapShape) => void;
+  broadcastShapeUpdate: (shape: MapShape) => void;
+  broadcastShapeRemove: (shapeId: string) => void;
   broadcastUndo: (shapeId: string) => void;
   broadcastClear: () => void;
   /** Leave the session and reset local state. */
@@ -49,7 +51,7 @@ export function useMapSession(): UseMapSessionReturn {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { addShape, removeShape, clearAll, loadState } = useMapStore();
+  const { addShape, updateShape, removeShape, clearAll, loadState } = useMapStore();
 
   const handleMessage = useCallback(
     (msg: MapSessionMessage) => {
@@ -59,6 +61,9 @@ export function useMapSession(): UseMapSessionReturn {
           break;
         case "shape-add":
           addShape(msg.shape);
+          break;
+        case "shape-update":
+          updateShape(msg.shape.id, msg.shape);
           break;
         case "shape-remove":
         case "undo":
@@ -72,7 +77,7 @@ export function useMapSession(): UseMapSessionReturn {
           break;
       }
     },
-    [addShape, removeShape, clearAll, loadState]
+    [addShape, updateShape, removeShape, clearAll, loadState]
   );
 
   const openSocket = useCallback(
@@ -167,6 +172,14 @@ export function useMapSession(): UseMapSessionReturn {
     (shape: MapShape) => send({ kind: "shape-add", shape }),
     [send]
   );
+  const broadcastShapeUpdate = useCallback(
+    (shape: MapShape) => send({ kind: "shape-update", shape }),
+    [send]
+  );
+  const broadcastShapeRemove = useCallback(
+    (shapeId: string) => send({ kind: "shape-remove", shapeId }),
+    [send]
+  );
   const broadcastUndo = useCallback(
     (shapeId: string) => send({ kind: "undo", shapeId }),
     [send]
@@ -203,6 +216,8 @@ export function useMapSession(): UseMapSessionReturn {
     createSession,
     joinSession,
     broadcastShape,
+    broadcastShapeUpdate,
+    broadcastShapeRemove,
     broadcastUndo,
     broadcastClear,
     disconnect,

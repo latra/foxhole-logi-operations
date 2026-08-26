@@ -9,6 +9,7 @@ export interface ShapeState {
   undoStack: string[];
 
   addShape: (shape: MapShape) => void;
+  updateShape: (id: string, patch: Partial<MapShape>) => void;
   removeShape: (id: string) => void;
   undoLast: (authorId: string) => MapShape | null;
   clearAll: () => void;
@@ -26,6 +27,11 @@ export function createShapeStore(): ShapeStore {
 
     addShape: (shape) =>
       set((s) => ({ shapes: [...s.shapes, shape] })),
+
+    updateShape: (id, patch) =>
+      set((s) => ({
+        shapes: s.shapes.map((sh) => (sh.id === id ? { ...sh, ...patch } : sh)),
+      })),
 
     removeShape: (id) =>
       set((s) => ({ shapes: s.shapes.filter((sh) => sh.id !== id) })),

@@ -2,6 +2,9 @@
 
 export type ShapeType = "line" | "arrow" | "rect" | "triangle" | "circle" | "text" | "stamp-rect" | "stamp-triangle";
 
+/** activeTool accepts every drawable shape plus the non-drawing "select" mode. */
+export type ToolMode = ShapeType | "select";
+
 export interface Point {
   x: number;
   y: number;
@@ -20,6 +23,8 @@ export interface MapShape {
   text?: string;
   /** Author peer id */
   author: string;
+  /** Rotation in radians around the shape's bounding-box center. Omitted/0 = unrotated. */
+  rotation?: number;
 }
 
 /** A user currently connected to a map session. */
@@ -33,6 +38,7 @@ export interface PresenceUser {
 export type MapSessionMessage =
   | { kind: "full-state"; shapes: MapShape[] }
   | { kind: "shape-add"; shape: MapShape }
+  | { kind: "shape-update"; shape: MapShape }
   | { kind: "shape-remove"; shapeId: string }
   | { kind: "clear-all" }
   | { kind: "undo"; shapeId: string }

@@ -92,7 +92,7 @@ async def map_session_ws(websocket: WebSocket, code: str, token: str = Query(...
                 msg = await websocket.receive_json()
                 kind = msg.get("kind")
 
-                if kind not in ("shape-add", "shape-remove", "undo", "clear-all"):
+                if kind not in ("shape-add", "shape-update", "shape-remove", "undo", "clear-all"):
                     continue
 
                 if kind == "shape-add":
@@ -101,6 +101,17 @@ async def map_session_ws(websocket: WebSocket, code: str, token: str = Query(...
                     except Exception:
                         continue
                     shapes.append(shape)
+                elif kind == "shape-update":
+                    try:
+                        shape = MapShapeIn(**msg["shape"]).model_dump()
+                    except Exception:
+                        continue
+                    for i, s in enumerate(shapes):
+                        if s["id"] == shape["id"]:
+                            shapes[i] = shape
+                            break
+                    else:
+                        continue
                 elif kind in ("shape-remove", "undo"):
                     shape_id = msg.get("shapeId")
                     shapes[:] = [s for s in shapes if s["id"] != shape_id]

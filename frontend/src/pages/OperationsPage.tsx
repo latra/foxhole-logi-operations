@@ -13,6 +13,7 @@ import { useGroupStore } from "../stores/groupStore";
 import { useAuthStore } from "../stores/authStore";
 import { useCurrentWar } from "../hooks/useCurrentWar";
 import { useRegions } from "../hooks/useRegions";
+import { useOperationsSocket } from "../hooks/useOperationsSocket";
 import { listSignups } from "../api/operations";
 
 export default function OperationsPage() {
@@ -104,12 +105,32 @@ export default function OperationsPage() {
     }
   };
 
-  const handleOperationUpdated = () => {
-    fetchOperations();
-    if (selectedOperation) {
-      // Re-select to refresh the detail view
-      selectOperation(selectedOperation);
+  /** Re-fetch the list and, if the currently-open operation is still in it,
+   *  re-select the fresh copy so the detail view picks up the new fields
+   *  too (status, debrief, invited groups, ...). If it's gone (deleted, or
+   *  this user's group lost its invite), fall back to the list. */
+  const refreshOperations = async () => {
+    await fetchOperations();
+    const fresh = useOperationStore.getState().operations;
+    const current = useOperationStore.getState().selectedOperation;
+    if (!current) return;
+    const stillVisible = fresh.find((o) => o.id === current.id);
+    if (stillVisible) {
+      selectOperation(stillVisible);
+    } else {
+      clearSelection();
+      navigate("/operations", { replace: true });
     }
+  };
+
+  // Live updates: created / changed / cancelled / deleted operations, for
+  // any group this user belongs to — see backend/api/ws_manager.py.
+  const wsStatus = useOperationsSocket(() => {
+    refreshOperations();
+  });
+
+  const handleOperationUpdated = () => {
+    refreshOperations();
   };
 
   const filteredOps =
@@ -138,6 +159,26 @@ export default function OperationsPage() {
 
   return (
     <PageShell>
+      {wsStatus === "disconnected" && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 12px",
+            marginBottom: 12,
+            background: "var(--color-surface)",
+            border: "1px solid rgba(196,155,42,0.3)",
+            borderLeft: "3px solid var(--color-warning)",
+            borderRadius: 4,
+            fontSize: 12,
+            color: "var(--color-warning)",
+          }}
+        >
+          <i className="material-icons" style={{ fontSize: 16 }}>wifi_off</i>
+          Live updates disconnected — reconnecting…
+        </div>
+      )}
       <div className="row" style={{ display: "flex", gap: 24, margin: 0 }}>
         {/* Left panel — operations list */}
         <div style={{ width: 340, minWidth: 280, flexShrink: 0 }}>

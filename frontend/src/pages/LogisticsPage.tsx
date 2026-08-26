@@ -1,6 +1,6 @@
 /* ── Logistics Page — master-detail layout ────────────────────────── */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PageShell from "../components/layout/PageShell";
 import LogisticsListSidebar from "../components/logistics/LogisticsListSidebar";
@@ -17,9 +17,12 @@ import type { GroupMembership } from "../types/models";
 
 export default function LogisticsPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Deep link from e.g. an Operation's linked logistics lists (?order=<id>)
   const deepLinkOrderId = searchParams.get("order");
+  // "New list" clicked from an Operation's Logistics Lists panel (?newForOperation=<id>)
+  // — auto-opens the create modal and links the new order back to that operation.
+  const newForOperationId = searchParams.get("newForOperation");
   const user = useAuthStore((s) => s.user);
   const activeGroup = useGroupStore((s) => s.activeGroup);
   const memberships = useGroupStore((s) => s.memberships);
@@ -77,9 +80,10 @@ export default function LogisticsPage() {
     }
   }, [activeGroup, fetchOrders]);
 
+  const [stockpilesReady, setStockpilesReady] = useState(false);
   useEffect(() => {
     if (activeGroup && war) {
-      fetchStockpiles(activeGroup.id, war.id);
+      fetchStockpiles(activeGroup.id, war.id).finally(() => setStockpilesReady(true));
     }
   }, [activeGroup, war, fetchStockpiles]);
 
@@ -105,6 +109,18 @@ export default function LogisticsPage() {
     }
   }, [stockpiles, newOrderDestination]);
 
+  const clearNewForOperationParam = () => {
+    if (!newForOperationId) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("newForOperation");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const handleCreateOrder = async () => {
     if (!activeGroup || !newOrderDestination) return;
     const name = newOrderName.trim() || `Order ${orders.length + 1}`;
@@ -112,12 +128,16 @@ export default function LogisticsPage() {
       activeGroup.id,
       name,
       newOrderDestination,
+      newForOperationId,
     );
     if (newOrder) {
       selectOrder(newOrder.id);
-      toastSuccess("Order created");
+      toastSuccess(
+        newForOperationId ? "Order created and linked to the operation" : "Order created",
+      );
       setShowCreateModal(false);
       setNewOrderName("");
+      clearNewForOperationParam();
     }
   };
 
@@ -133,6 +153,17 @@ export default function LogisticsPage() {
     setNewOrderDestination(stockpiles[0]?.id ?? "");
     setShowCreateModal(true);
   };
+
+  // Arrived here via an Operation's "New list" button — pop the create
+  // modal open automatically instead of landing on a blank list page.
+  const autoOpenedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!newForOperationId || !stockpilesReady) return;
+    if (autoOpenedForRef.current === newForOperationId) return;
+    autoOpenedForRef.current = newForOperationId;
+    handleNewOrderClick();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newForOperationId, stockpilesReady]);
 
   const activeOrder = orders.find((o) => o.id === activeOrderId);
 
@@ -220,7 +251,10 @@ export default function LogisticsPage() {
             justifyContent: "center",
             zIndex: 1000,
           }}
-          onClick={() => setShowCreateModal(false)}
+          onClick={() => {
+            setShowCreateModal(false);
+            clearNewForOperationParam();
+          }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -233,9 +267,24 @@ export default function LogisticsPage() {
               border: "1px solid rgba(219,218,216,0.12)",
             }}
           >
-            <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>
+            <h3 style={{ margin: newForOperationId ? "0 0 4px" : "0 0 16px", fontSize: 16 }}>
               New Logistics Order
             </h3>
+            {newForOperationId && (
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: 12,
+                  color: "var(--color-text-dim)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <i className="material-icons" style={{ fontSize: 14 }}>link</i>
+                Will be linked to the operation you came from
+              </p>
+            )}
 
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: "var(--color-text-dim)" }}>
@@ -274,7 +323,10 @@ export default function LogisticsPage() {
             >
               <button
                 className="btn btn-secondary btn-small"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  clearNewForOperationParam();
+                }}
               >
                 Cancel
               </button>
