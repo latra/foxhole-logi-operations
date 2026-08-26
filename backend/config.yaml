@@ -1,0 +1,15 @@
+app:
+  name: "FastAPI Backend"
+
+database:
+  type: "postgresql"
+  host: "94.130.67.179"
+  port: 5432
+  database: "foxholelogi"
+
+
+auth:
+  access_token_expire_minutes: 3200
+
+google:
+  enabled: true
