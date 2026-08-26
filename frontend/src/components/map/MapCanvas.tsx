@@ -41,6 +41,11 @@ const TILE_SIZE = 512;
 const MAP_W = 10240;
 const MAP_H = 6216;
 
+/** Base size (map-space units) for text shapes — drawShape, shapeBBox, and
+ *  the live text-input preview all derive their font size from this so the
+ *  three stay in lockstep. */
+const TEXT_BASE_FONT_SIZE = 16;
+
 const ZOOM_LEVELS = [
   { scale: 1 / 8, dir: "0", cols: 3, rows: 2 },
   { scale: 1 / 4, dir: "1", cols: 5, rows: 4 },
@@ -478,34 +483,36 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     setTextValue("");
   }, []);
 
-  /** Enter, Escape, and blur can all reach this — only the first one "wins". */
+  /** Enter, Escape, and blur can all reach this — only the first one "wins".
+   *  Reads `textInput` directly rather than via `setTextInput`'s functional-
+   *  updater form: that form's callback runs twice under StrictMode (React
+   *  double-invokes updaters in dev to catch impure ones), which would
+   *  otherwise add/broadcast the same shape twice. */
   const closeTextInput = useCallback(
     (commit: boolean) => {
       if (textInputHandledRef.current) return;
       textInputHandledRef.current = true;
 
-      setTextInput((current) => {
-        if (commit && current && textValue.trim()) {
-          const { activeColor: color, strokeWidth: sw, peerId: pid, onShapeAdded: onAdd } = propsRef.current;
-          const cam = camRef.current;
-          const shape: MapShape = {
-            id: generateId(),
-            type: "text",
-            p1: current.pos,
-            p2: current.pos,
-            color,
-            strokeWidth: sw / cam.zoom,
-            text: textValue.trim(),
-            author: pid,
-          };
-          addShape(shape);
-          onAdd(shape);
-        }
-        return null;
-      });
+      if (commit && textInput && textValue.trim()) {
+        const { activeColor: color, strokeWidth: sw, peerId: pid, onShapeAdded: onAdd } = propsRef.current;
+        const cam = camRef.current;
+        const shape: MapShape = {
+          id: generateId(),
+          type: "text",
+          p1: textInput.pos,
+          p2: textInput.pos,
+          color,
+          strokeWidth: sw / cam.zoom,
+          text: textValue.trim(),
+          author: pid,
+        };
+        addShape(shape);
+        onAdd(shape);
+      }
+      setTextInput(null);
       setTextValue("");
     },
-    [textValue, addShape]
+    [textInput, textValue, addShape]
   );
 
   /* ── Pointer handlers ─────────────────────────────────────────── */
@@ -589,6 +596,17 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       }
 
       if (propsRef.current.activeTool === "text") {
+        // Without this, the browser's default mousedown behavior focuses
+        // nothing (the canvas isn't focusable) and blurs whatever currently
+        // has focus — including the input we're about to autoFocus onto,
+        // right after we create it. That fires onBlur immediately and closes
+        // the box before the user can type a single character.
+        e.preventDefault();
+        // That same preventDefault also stops the browser from blurring a
+        // text box that's already open when the user clicks elsewhere on the
+        // map — so its onBlur-commit never fires. Commit it ourselves before
+        // starting the next one, or that in-progress text is silently lost.
+        if (textInput) closeTextInput(true);
         const rect = canvas.getBoundingClientRect();
         openTextInput(pos, { x: e.clientX - rect.left, y: e.clientY - rect.top });
         return;
@@ -616,7 +634,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       canvas.setPointerCapture(e.pointerId);
       needsRender.current = true;
     },
-    [screenToMap, openTextInput, removeShape, addShape]
+    [screenToMap, openTextInput, closeTextInput, textInput, removeShape, addShape]
   );
 
   /** Find the War POI nearest the given screen point, within a fixed screen-pixel radius. */
@@ -777,7 +795,12 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   );
 
   /* ── Wheel zoom ───────────────────────────────────────────────── */
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  // A plain `onWheel` prop attaches as a passive listener (React's default
+  // for wheel/touch events, to match the browser's own scroll-perf
+  // intervention) — preventDefault() inside it is a no-op that also logs a
+  // console warning on every scroll. Attaching natively with
+  // `{ passive: false }` below is the documented way around that.
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -797,6 +820,13 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     clampCamera();
     needsRender.current = true;
   }, [clampCamera]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
 
   /* ── Keyboard ─────────────────────────────────────────────────── */
   useEffect(() => {
@@ -912,7 +942,6 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
-        onWheel={handleWheel}
         onContextMenu={handleContextMenu}
         style={{ display: "block", touchAction: "none" }}
       />
@@ -961,7 +990,11 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       {textInput && (
         <input
           autoFocus
-          type="text"
+          // No `type="text"` — the app-wide `.foxhole-app input[type="text"]`
+          // rule in overrides.css forces a background/border/padding via
+          // `!important`, which would otherwise beat every style below and
+          // put the boxed-input look right back. A type-less <input> is
+          // still a plain text field, just outside that selector.
           value={textValue}
           onChange={(e) => setTextValue(e.target.value)}
           onKeyDown={(e) => {
@@ -969,19 +1002,25 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
             if (e.key === "Escape") closeTextInput(false);
           }}
           onBlur={() => closeTextInput(true)}
-          placeholder="Type text..."
           style={{
             position: "absolute",
             left: textInput.screenPos.x,
             top: textInput.screenPos.y,
-            background: "rgba(30,30,30,0.9)",
-            border: "1px solid var(--color-primary)",
-            borderRadius: 3,
+            background: "transparent",
+            border: "none",
             color: activeColor,
-            fontSize: 16,
-            padding: "4px 8px",
-            outline: "none",
+            caretColor: activeColor,
+            // Matches drawShape's text case exactly (TEXT_BASE_FONT_SIZE +
+            // strokeWidth*2, at map scale) so what's typed previews at the
+            // same size it will render at once committed.
+            fontSize: `${TEXT_BASE_FONT_SIZE * camRef.current.zoom + strokeWidth * 2}px`,
+            lineHeight: 1.2,
+            height: "auto",
+            width: "auto",
             minWidth: 120,
+            margin: 0,
+            padding: 0,
+            outline: "none",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
             zIndex: 50,
           }}
@@ -1009,7 +1048,7 @@ function shapeBBox(s: MapShape): BBox {
       return { minX: s.p1.x - r, minY: s.p1.y - r, maxX: s.p1.x + r, maxY: s.p1.y + r };
     }
     case "text": {
-      const fontSize = 14 + s.strokeWidth * 2;
+      const fontSize = TEXT_BASE_FONT_SIZE + s.strokeWidth * 2;
       const w = Math.max(24, (s.text?.length ?? 0) * fontSize * 0.55);
       const h = fontSize * 1.3;
       return { minX: s.p1.x, minY: s.p1.y, maxX: s.p1.x + w, maxY: s.p1.y + h };
@@ -1265,7 +1304,7 @@ function drawShape(ctx: CanvasRenderingContext2D, s: MapShape) {
     }
     case "text":
       if (s.text) {
-        ctx.font = `${14 + s.strokeWidth * 2}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+        ctx.font = `${TEXT_BASE_FONT_SIZE + s.strokeWidth * 2}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.fillText(s.text, s.p1.x, s.p1.y);
