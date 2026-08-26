@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import UserAvatar from "../common/UserAvatar";
-import type { ShapeType, PresenceUser } from "./mapTypes";
+import type { ShapeType, ToolMode, PresenceUser } from "./mapTypes";
 
 interface Props {
-  activeTool: ShapeType;
-  onToolChange: (tool: ShapeType) => void;
+  activeTool: ToolMode;
+  onToolChange: (tool: ToolMode) => void;
   activeColor: string;
   onColorChange: (color: string) => void;
   strokeWidth: number;
@@ -14,20 +14,20 @@ interface Props {
   onUndo: () => void;
   onClear: () => void;
   onExportPng: () => void;
-  showWarLayer: boolean;
-  onToggleWarLayer: () => void;
+  showDistances: boolean;
+  onToggleShowDistances: () => void;
   sessionCode: string | null;
   connectedUsers: PresenceUser[];
   onDisconnect: () => void;
 }
 
-const TOOLS: { type: ShapeType; icon: string; label: string }[] = [
-  { type: "line", icon: "show_chart", label: "Line" },
-  { type: "arrow", icon: "arrow_forward", label: "Arrow" },
-  { type: "rect", icon: "crop_square", label: "Rectangle" },
-  { type: "triangle", icon: "change_history", label: "Triangle" },
-  { type: "circle", icon: "circle", label: "Circle" },
-  { type: "text", icon: "text_fields", label: "Text" },
+const TOOLS: { type: ShapeType; icon: string; label: string; hotkey: string }[] = [
+  { type: "line", icon: "show_chart", label: "Line", hotkey: "2" },
+  { type: "arrow", icon: "arrow_forward", label: "Arrow", hotkey: "3" },
+  { type: "rect", icon: "crop_square", label: "Rectangle", hotkey: "4" },
+  { type: "triangle", icon: "change_history", label: "Triangle", hotkey: "5" },
+  { type: "circle", icon: "circle", label: "Circle", hotkey: "6" },
+  { type: "text", icon: "text_fields", label: "Text", hotkey: "7" },
 ];
 
 const COLORS = [
@@ -53,8 +53,8 @@ export default function MapToolbar({
   onUndo,
   onClear,
   onExportPng,
-  showWarLayer,
-  onToggleWarLayer,
+  showDistances,
+  onToggleShowDistances,
   sessionCode,
   connectedUsers,
   onDisconnect,
@@ -200,13 +200,32 @@ export default function MapToolbar({
       {/* Divider */}
       <span style={dividerStyle} />
 
+      {/* Select tool — pick an existing shape to move/resize/rotate/delete it */}
+      <div style={sectionStyle}>
+        <button
+          className="btn-flat"
+          title="Select (move, resize, rotate, delete a shape) (1)"
+          style={{
+            ...toolBtnStyle,
+            background: activeTool === "select" ? "rgba(36,86,130,0.25)" : "transparent",
+            color: activeTool === "select" ? "var(--color-light)" : "var(--color-text-dim)",
+          }}
+          onClick={() => onToolChange("select")}
+        >
+          <i className="material-icons" style={{ fontSize: 18 }}>touch_app</i>
+          <KeyBadge label="1" />
+        </button>
+      </div>
+
+      <span style={dividerStyle} />
+
       {/* Shape tools */}
       <div style={sectionStyle}>
         {TOOLS.map((t) => (
           <button
             key={t.type}
             className="btn-flat"
-            title={t.label}
+            title={`${t.label} (${t.hotkey})`}
             style={{
               ...toolBtnStyle,
               background: activeTool === t.type ? "rgba(36,86,130,0.25)" : "transparent",
@@ -215,6 +234,7 @@ export default function MapToolbar({
             onClick={() => onToolChange(t.type)}
           >
             <i className="material-icons" style={{ fontSize: 18 }}>{t.icon}</i>
+            <KeyBadge label={t.hotkey} />
           </button>
         ))}
       </div>
@@ -306,19 +326,20 @@ export default function MapToolbar({
 
       <span style={dividerStyle} />
 
-      {/* War API layer toggle */}
+      {/* Distances toggle */}
       <div style={sectionStyle}>
         <button
           className="btn-flat"
-          title={showWarLayer ? "Hide war info layer" : "Show war info layer"}
+          title={`${showDistances ? "Hide" : "Show"} distances on every line/arrow (D)`}
           style={{
             ...toolBtnStyle,
-            background: showWarLayer ? "rgba(36,86,130,0.25)" : "transparent",
-            color: showWarLayer ? "var(--color-light)" : "var(--color-text-dim)",
+            background: showDistances ? "rgba(36,86,130,0.25)" : "transparent",
+            color: showDistances ? "var(--color-light)" : "var(--color-text-dim)",
           }}
-          onClick={onToggleWarLayer}
+          onClick={onToggleShowDistances}
         >
-          <i className="material-icons" style={{ fontSize: 18 }}>public</i>
+          <i className="material-icons" style={{ fontSize: 18 }}>straighten</i>
+          <KeyBadge label="D" />
         </button>
       </div>
 
@@ -327,10 +348,10 @@ export default function MapToolbar({
       {/* Markers (drag onto map) */}
       <div style={sectionStyle}>
         <span style={{ fontSize: 11, color: "var(--color-text-dim)", marginRight: 2 }}>Markers:</span>
-        <StampIcon type="stamp-rect" color="#2ecc71" label="Green rectangle" />
-        <StampIcon type="stamp-rect" color="#3498db" label="Blue rectangle" />
-        <StampIcon type="stamp-triangle" color="#2ecc71" label="Green triangle" />
-        <StampIcon type="stamp-triangle" color="#3498db" label="Blue triangle" />
+        <StampIcon type="stamp-rect" color="#2ecc71" label="Green rectangle" hotkey="Q" />
+        <StampIcon type="stamp-rect" color="#3498db" label="Blue rectangle" hotkey="W" />
+        <StampIcon type="stamp-triangle" color="#2ecc71" label="Green triangle" hotkey="E" />
+        <StampIcon type="stamp-triangle" color="#3498db" label="Blue triangle" hotkey="R" />
       </div>
 
       {/* Right side — disconnect */}
@@ -384,15 +405,51 @@ const toolBtnStyle: React.CSSProperties = {
   borderRadius: 4,
   cursor: "pointer",
   transition: "var(--transition)",
+  position: "relative",
 };
+
+/* ── Small corner badge showing a tool's keyboard shortcut ── */
+function KeyBadge({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        bottom: -4,
+        right: -4,
+        fontSize: 8,
+        lineHeight: 1,
+        fontWeight: 700,
+        fontFamily: "monospace",
+        color: "var(--color-text-dim)",
+        background: "rgba(0,0,0,0.65)",
+        border: "1px solid rgba(219,218,216,0.25)",
+        borderRadius: 3,
+        padding: "1px 3px",
+        pointerEvents: "none",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 
 /* ── Draggable stamp icon ── */
-function StampIcon({ type, color, label }: { type: string; color: string; label: string }) {
+function StampIcon({
+  type,
+  color,
+  label,
+  hotkey,
+}: {
+  type: string;
+  color: string;
+  label: string;
+  hotkey: string;
+}) {
   return (
     <div
       draggable
-      title={label + " (drag onto map)"}
+      title={`${label} (drag onto map, or press ${hotkey})`}
       onDragStart={(e) => {
         e.dataTransfer.setData("stamp-type", type);
         e.dataTransfer.setData("stamp-color", color);
@@ -408,8 +465,10 @@ function StampIcon({ type, color, label }: { type: string; color: string; label:
         borderRadius: 4,
         border: "1px dashed rgba(219,218,216,0.2)",
         background: "rgba(255,255,255,0.03)",
+        position: "relative",
       }}
     >
+      <KeyBadge label={hotkey} />
       {type === "stamp-rect" ? (
         <div
           style={{

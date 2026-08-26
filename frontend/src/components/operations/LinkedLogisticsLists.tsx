@@ -108,7 +108,7 @@ export default function LinkedLogisticsLists({ operation, canManage }: Props) {
               color: "var(--color-text-dim)",
               minWidth: "auto",
             }}
-            onClick={() => navigate("/logistics")}
+            onClick={() => navigate(`/logistics?newForOperation=${operation.id}`)}
           >
             <i className="material-icons" style={{ fontSize: 14, verticalAlign: "middle" }}>
               add

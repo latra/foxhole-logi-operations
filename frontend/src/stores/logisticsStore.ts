@@ -96,6 +96,7 @@ interface LogisticsState {
     groupId: string,
     name: string,
     destinationStockpileId: string,
+    operationId?: string | null,
   ) => Promise<LogisticsOrder | null>;
   updateActiveOrder: (data: {
     name?: string;
@@ -279,12 +280,13 @@ export const useLogisticsStore = create<LogisticsState>((set, get) => {
     }
   },
 
-  createNewOrder: async (groupId, name, destinationStockpileId) => {
+  createNewOrder: async (groupId, name, destinationStockpileId, operationId) => {
     try {
       const newOrder = await createOrder({
         group_id: groupId,
         name,
         destination_stockpile_id: destinationStockpileId,
+        operation_id: operationId ?? null,
       });
       set({ orders: [...get().orders, newOrder] });
       return newOrder;

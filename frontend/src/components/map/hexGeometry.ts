@@ -132,3 +132,32 @@ export function hexItemToPixel(
     y: center.y - HEX_HALF_HEIGHT_PX + fracY * HEX_HALF_HEIGHT_PX * 2,
   };
 }
+
+/* ── Real-world scale ──────────────────────────────────────────────────
+ * Per the Foxhole wiki, each hex Region is 2.184 km wide by 1.890 km
+ * tall — the same width/height convention as HEX_HALF_WIDTH_PX/
+ * HEX_HALF_HEIGHT_PX above, so those give us meters-per-pixel directly.
+ * The x/y calibration fit isn't perfectly isotropic (see module doc),
+ * so the two axes get very slightly different meters-per-pixel — using
+ * each axis's own value keeps distance/bearing measurements accurate
+ * instead of assuming a single uniform scale. */
+const HEX_REAL_WIDTH_M = 2184;
+const HEX_REAL_HEIGHT_M = 1890;
+
+export const METERS_PER_PIXEL_X = HEX_REAL_WIDTH_M / (HEX_HALF_WIDTH_PX * 2);
+export const METERS_PER_PIXEL_Y = HEX_REAL_HEIGHT_M / (HEX_HALF_HEIGHT_PX * 2);
+
+/** Real-world distance, in meters, spanned by a canvas-pixel delta. */
+export function pixelDistanceMeters(dxPx: number, dyPx: number): number {
+  const dxM = dxPx * METERS_PER_PIXEL_X;
+  const dyM = dyPx * METERS_PER_PIXEL_Y;
+  return Math.hypot(dxM, dyM);
+}
+
+/** Compass bearing in degrees (0 = north, 90 = east, clockwise) for a canvas-pixel delta. */
+export function pixelBearingDegrees(dxPx: number, dyPx: number): number {
+  const dxM = dxPx * METERS_PER_PIXEL_X;
+  const dyM = dyPx * METERS_PER_PIXEL_Y;
+  const deg = (Math.atan2(dxM, -dyM) * 180) / Math.PI;
+  return deg < 0 ? deg + 360 : deg;
+}

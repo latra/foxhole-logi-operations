@@ -26,18 +26,13 @@ export interface WarPoi {
 export const FACTION_COLORS: Record<Faction, string> = {
   WARDENS: "#3b82f6", // blue
   COLONIALS: "#22c55e", // green
-  NONE: "#eab308", // yellow
+  NONE: "#ffffff", // white
 };
 
 /** War API mapItem.iconType → human-readable structure name.
  *  See MapStructure enum in community War API tooling (e.g. Snappey/Foxhole-Map). */
 export const STRUCTURE_NAMES: Record<number, string> = {
-  5: "Static Base",
-  6: "Static Base",
-  7: "Static Base",
-  8: "Forward Base",
-  9: "Forward Base",
-  10: "Forward Base",
+
   11: "Hospital",
   12: "Vehicle Factory",
   13: "Armory",
@@ -88,11 +83,177 @@ export const STRUCTURE_NAMES: Record<number, string> = {
   75: "Oil Rig",
   83: "Weather Station",
   84: "Mortar House",
+  88: "Aircraft Depot",
+  89: "Aircraft Factory",
+  90: "Aircraft Radar",
+  91: "Aircraft Runway (T1)",
+  92: "Aircraft Runway (T2)",
+  97: "Anti-Air Gun"
 };
 
 export function structureName(iconType: number): string {
   return STRUCTURE_NAMES[iconType] ?? `Unknown (${iconType})`;
 }
+
+/** Structure name → Material Icons ligature name, drawn on the canvas in place
+ *  of a plain dot (see MapCanvas.tsx). Material Icons is the same open-source
+ *  icon font already used throughout this app's UI (index.html) — these are
+ *  original, generic glyphs picked for a reasonable semantic match, not a
+ *  reproduction of Foxhole's own (copyrighted) in-game icon art. */
+const STRUCTURE_ICONS: Record<string, string> = {
+  Hospital: "local_hospital",
+  "Vehicle Factory": "directions_car",
+  Armory: "security",
+  "Supply Station": "local_shipping",
+  Workshop: "build",
+  "Manufacturing Plant": "precision_manufacturing",
+  Refinery: "factory",
+  Shipyard: "directions_boat",
+  "Tech Center": "memory",
+  "Salvage Field": "recycling",
+  "Component Field": "extension",
+  "Fuel Field": "local_gas_station",
+  "Sulfur Field": "science",
+  "World Map Tent": "map",
+  "Travel Tent": "hiking",
+  "Training Area": "fitness_center",
+  "Special Base (Keep)": "castle",
+  "Observation Tower": "visibility",
+  Fort: "shield",
+  "Troop Ship": "directions_boat",
+  "Sulfur Mine": "terrain",
+  "Storage Facility": "warehouse",
+  Factory: "factory",
+  "Garrison Station": "military_tech",
+  "Ammo Factory": "local_fire_department",
+  "Rocket Site": "rocket_launch",
+  "Salvage Mine": "construction",
+  "Construction Yard": "engineering",
+  "Component Mine": "hardware",
+  "Oil Well": "opacity",
+  "Relic Base": "account_balance",
+  "Mass Production Factory": "factory",
+  Seaport: "anchor",
+  "Coastal Gun": "gps_fixed",
+  "Soul Factory": "auto_awesome",
+  "Town Base": "home_work",
+  "Storm Cannon": "bolt",
+  "Intel Center": "satellite_alt",
+  "Coal Field": "terrain",
+  "Oil Field": "opacity",
+  "Rocket Target": "my_location",
+  "Rocket Ground Zero": "warning",
+  "Rocket Site (Armed)": "rocket_launch",
+  "Oil Rig": "opacity",
+  "Weather Station": "cloud",
+  "Mortar House": "adjust",
+  "Aircraft Depot": "flight",
+  "Aircraft Factory": "flight_takeoff",
+  "Aircraft Radar": "radar",
+  "Aircraft Runway (T1)": "flight_land",
+  "Aircraft Runway (T2)": "flight_land",
+  "Anti-Air Gun": "gps_not_fixed",
+};
+
+const DEFAULT_STRUCTURE_ICON = "place";
+
+export function structureIcon(iconType: number): string {
+  return STRUCTURE_ICONS[structureName(iconType)] ?? DEFAULT_STRUCTURE_ICON;
+}
+
+/** Same lookup as structureIcon(), but by structure name directly — used by
+ *  the map layers panel, which works off ALL_STRUCTURE_NAMES rather than a
+ *  live War API iconType. */
+export function iconForStructureName(name: string): string {
+  return STRUCTURE_ICONS[name] ?? DEFAULT_STRUCTURE_ICON;
+}
+
+/** Every distinct structure name, sorted — drives the map layers panel's checklist. */
+export const ALL_STRUCTURE_NAMES: string[] = Array.from(new Set(Object.values(STRUCTURE_NAMES))).sort();
+
+/* ── Categories — groups the map layers panel's checklist, each toggleable as a whole ── */
+export const STRUCTURE_CATEGORIES = ["RESOURCES", "STORAGE", "BUILDINGS", "DEFENCES"] as const;
+export type StructureCategory = (typeof STRUCTURE_CATEGORIES)[number];
+
+const STRUCTURE_CATEGORY: Record<string, StructureCategory> = {
+  // RESOURCES — raw extraction points (fields, mines, wells/rigs)
+  "Salvage Field": "RESOURCES",
+  "Component Field": "RESOURCES",
+  "Fuel Field": "RESOURCES",
+  "Sulfur Field": "RESOURCES",
+  "Sulfur Mine": "RESOURCES",
+  "Salvage Mine": "RESOURCES",
+  "Component Mine": "RESOURCES",
+  "Oil Well": "RESOURCES",
+  "Coal Field": "RESOURCES",
+  "Oil Field": "RESOURCES",
+  "Oil Rig": "RESOURCES",
+
+  // STORAGE — holds/dispenses resources
+  "Storage Facility": "STORAGE",
+  "Supply Station": "STORAGE",
+  Seaport: "STORAGE",
+
+  // BUILDINGS — production, utility, and other non-combat facilities
+  Hospital: "BUILDINGS",
+  "Vehicle Factory": "BUILDINGS",
+  Armory: "BUILDINGS",
+  Workshop: "BUILDINGS",
+  "Manufacturing Plant": "BUILDINGS",
+  Refinery: "BUILDINGS",
+  Shipyard: "BUILDINGS",
+  "Tech Center": "BUILDINGS",
+  "World Map Tent": "BUILDINGS",
+  "Travel Tent": "BUILDINGS",
+  "Training Area": "BUILDINGS",
+  "Troop Ship": "BUILDINGS",
+  Factory: "BUILDINGS",
+  "Ammo Factory": "BUILDINGS",
+  "Construction Yard": "BUILDINGS",
+  "Mass Production Factory": "BUILDINGS",
+  "Soul Factory": "BUILDINGS",
+  "Intel Center": "BUILDINGS",
+  "Weather Station": "BUILDINGS",
+  "Aircraft Depot": "BUILDINGS",
+  "Aircraft Factory": "BUILDINGS",
+  "Aircraft Runway (T1)": "BUILDINGS",
+  "Aircraft Runway (T2)": "BUILDINGS",
+
+  // DEFENCES — bases and combat/military structures
+  "Special Base (Keep)": "DEFENCES",
+  "Observation Tower": "DEFENCES",
+  Fort: "DEFENCES",
+  "Garrison Station": "DEFENCES",
+  "Rocket Site": "DEFENCES",
+  "Relic Base": "DEFENCES",
+  "Coastal Gun": "DEFENCES",
+  "Town Base": "DEFENCES",
+  "Storm Cannon": "DEFENCES",
+  "Rocket Target": "DEFENCES",
+  "Rocket Ground Zero": "DEFENCES",
+  "Rocket Site (Armed)": "DEFENCES",
+  "Mortar House": "DEFENCES",
+  "Aircraft Radar": "DEFENCES",
+  "Anti-Air Gun": "DEFENCES",
+};
+
+export function categoryForStructureName(name: string): StructureCategory {
+  return STRUCTURE_CATEGORY[name] ?? "BUILDINGS";
+}
+
+/** Structure names grouped by category, each list sorted — drives the panel's grouped sections. */
+export const STRUCTURE_NAMES_BY_CATEGORY: Record<StructureCategory, string[]> = (() => {
+  const grouped: Record<StructureCategory, string[]> = {
+    RESOURCES: [],
+    STORAGE: [],
+    BUILDINGS: [],
+    DEFENCES: [],
+  };
+  for (const name of ALL_STRUCTURE_NAMES) {
+    grouped[categoryForStructureName(name)].push(name);
+  }
+  return grouped;
+})();
 
 /** Cheap, order-independent content signature — used to detect whether a
  *  freshly-fetched POI list actually differs from what's on screen, so

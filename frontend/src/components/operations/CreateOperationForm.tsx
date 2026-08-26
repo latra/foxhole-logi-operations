@@ -217,6 +217,7 @@ export default function CreateOperationForm({
                   onChange={(e) => setDurationMin(e.target.value)}
                   placeholder="e.g. 120"
                   min={1}
+                  max={100000}
                 />
                 {durationMin && parseInt(durationMin) > 0 && (
                   <span

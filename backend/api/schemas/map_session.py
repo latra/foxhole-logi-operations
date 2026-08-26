@@ -21,6 +21,7 @@ class MapShapeIn(BaseModel):
     strokeWidth: float
     text: str | None = None
     author: str
+    rotation: float | None = None
 
 
 class MapSessionResponse(BaseModel):

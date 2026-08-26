@@ -1,19 +1,47 @@
 /* ── Collaborative Map page ───────────────────────────────────────── */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "../components/layout/Navbar";
 import MapSessionModal from "../components/map/MapSessionModal";
 import MapToolbar from "../components/map/MapToolbar";
+import MapLayersPanel from "../components/map/MapLayersPanel";
 import MapCanvas from "../components/map/MapCanvas";
 import type { MapCanvasHandle } from "../components/map/MapCanvas";
 import { useMapSession } from "../components/map/useMapSession";
 import { useMapStore } from "../components/map/mapStore";
 import { useAuthStore } from "../stores/authStore";
-import type { ShapeType, MapShape } from "../components/map/mapTypes";
-import { fetchWarPois, warPoisSignature, type WarPoi } from "../components/map/warPois";
+import type { ToolMode, MapShape } from "../components/map/mapTypes";
+import {
+  ALL_STRUCTURE_NAMES,
+  fetchWarPois,
+  structureName,
+  STRUCTURE_NAMES_BY_CATEGORY,
+  warPoisSignature,
+  type StructureCategory,
+  type WarPoi,
+} from "../components/map/warPois";
 
 /** How often to refresh the War API points-of-interest layer. */
 const WAR_POIS_REFRESH_MS = 3 * 60 * 1000;
+
+/** 1-7, matching the toolbar's left-to-right order (see MapToolbar.tsx). */
+const TOOL_HOTKEYS: Record<string, ToolMode> = {
+  "1": "select",
+  "2": "line",
+  "3": "arrow",
+  "4": "rect",
+  "5": "triangle",
+  "6": "circle",
+  "7": "text",
+};
+
+/** Q/W/E/R — the four drag-and-drop map markers, matching MapToolbar's order. */
+const MARKER_HOTKEYS: Record<string, { tool: ToolMode; color: string }> = {
+  q: { tool: "stamp-rect", color: "#2ecc71" },
+  w: { tool: "stamp-rect", color: "#3498db" },
+  e: { tool: "stamp-triangle", color: "#2ecc71" },
+  r: { tool: "stamp-triangle", color: "#3498db" },
+};
 
 export default function MapPage() {
   const user = useAuthStore((s) => s.user);
@@ -27,6 +55,8 @@ export default function MapPage() {
     createSession,
     joinSession,
     broadcastShape,
+    broadcastShapeUpdate,
+    broadcastShapeRemove,
     broadcastUndo,
     broadcastClear,
     disconnect,
@@ -37,13 +67,51 @@ export default function MapPage() {
 
   const mapCanvasRef = useRef<MapCanvasHandle>(null);
 
-  const [activeTool, setActiveTool] = useState<ShapeType>("line");
+  const [activeTool, setActiveTool] = useState<ToolMode>("line");
   const [activeColor, setActiveColor] = useState("#e74c3c");
   const [strokeWidth, setStrokeWidth] = useState(3);
 
   const [warPois, setWarPois] = useState<WarPoi[]>([]);
   const [showWarLayer, setShowWarLayer] = useState(true);
+  const [hiddenStructureNames, setHiddenStructureNames] = useState<Set<string>>(() => new Set());
+  const [showDistances, setShowDistances] = useState(false);
   const warPoisSignatureRef = useRef("");
+
+  const toggleStructureName = useCallback((name: string) => {
+    setHiddenStructureNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+  const showAllStructures = useCallback(() => setHiddenStructureNames(new Set()), []);
+  const hideAllStructures = useCallback(() => setHiddenStructureNames(new Set(ALL_STRUCTURE_NAMES)), []);
+
+  /** Toggle every structure type in a category together — if any are currently
+   *  visible, hide the whole category; if all are hidden, show it all. */
+  const toggleCategory = useCallback((category: StructureCategory) => {
+    const namesInCategory = STRUCTURE_NAMES_BY_CATEGORY[category];
+    setHiddenStructureNames((prev) => {
+      const allHidden = namesInCategory.every((n) => prev.has(n));
+      const next = new Set(prev);
+      if (allHidden) {
+        for (const n of namesInCategory) next.delete(n);
+      } else {
+        for (const n of namesInCategory) next.add(n);
+      }
+      return next;
+    });
+  }, []);
+
+  /** War POIs after the per-structure-type panel filter (each type defaults to visible). */
+  const visibleWarPois = useMemo(
+    () =>
+      hiddenStructureNames.size === 0
+        ? warPois
+        : warPois.filter((p) => !hiddenStructureNames.has(structureName(p.iconType))),
+    [warPois, hiddenStructureNames]
+  );
 
   /** Load points of interest from the live Foxhole War API, refreshed periodically.
    *  Only updates state (and so only redraws the war layer) when the fetched
@@ -77,6 +145,22 @@ export default function MapPage() {
     [broadcastShape]
   );
 
+  /** When a shape is moved/resized/rotated (select tool), broadcast the final state */
+  const handleShapeUpdated = useCallback(
+    (shape: MapShape) => {
+      broadcastShapeUpdate(shape);
+    },
+    [broadcastShapeUpdate]
+  );
+
+  /** When a shape is deleted via the select tool (handle or Delete key) */
+  const handleShapeRemoved = useCallback(
+    (shapeId: string) => {
+      broadcastShapeRemove(shapeId);
+    },
+    [broadcastShapeRemove]
+  );
+
   /** Undo */
   const handleUndo = useCallback(() => {
     const removed = undoLast(selfId);
@@ -102,11 +186,37 @@ export default function MapPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
         handleUndo();
+        return;
+      }
+
+      if (!isInSession || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // Don't hijack typing — the map's own text tool, the join-code field, etc.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      const tool = TOOL_HOTKEYS[e.key];
+      if (tool) {
+        setActiveTool(tool);
+        return;
+      }
+
+      const marker = MARKER_HOTKEYS[e.key.toLowerCase()];
+      if (marker) {
+        setActiveTool(marker.tool);
+        setActiveColor(marker.color);
+        return;
+      }
+
+      if (e.key.toLowerCase() === "d") {
+        setShowDistances((v) => !v);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleUndo]);
+  }, [handleUndo, isInSession]);
 
   return (
     <div
@@ -142,26 +252,42 @@ export default function MapPage() {
             onUndo={handleUndo}
             onClear={handleClear}
             onExportPng={handleExportPng}
-            showWarLayer={showWarLayer}
-            onToggleWarLayer={() => setShowWarLayer((v) => !v)}
+            showDistances={showDistances}
+            onToggleShowDistances={() => setShowDistances((v) => !v)}
             sessionCode={sessionCode}
             connectedUsers={connectedUsers}
             onDisconnect={disconnect}
           />
         )}
 
-        {/* Canvas — always rendered (darkened behind modal) */}
-        <MapCanvas
-          ref={mapCanvasRef}
-          activeTool={activeTool}
-          activeColor={activeColor}
-          strokeWidth={strokeWidth}
-          peerId={selfId}
-          onShapeAdded={handleShapeAdded}
-          enableStampDrop
-          warPois={warPois}
-          showWarLayer={showWarLayer}
-        />
+        {/* Canvas + right-side layers panel */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          <MapCanvas
+            ref={mapCanvasRef}
+            activeTool={activeTool}
+            activeColor={activeColor}
+            strokeWidth={strokeWidth}
+            peerId={selfId}
+            onShapeAdded={handleShapeAdded}
+            onShapeUpdated={handleShapeUpdated}
+            onShapeRemoved={handleShapeRemoved}
+            enableStampDrop
+            warPois={visibleWarPois}
+            showWarLayer={showWarLayer}
+            showDistances={showDistances}
+          />
+
+          <MapLayersPanel
+            showWarLayer={showWarLayer}
+            onToggleWarLayer={() => setShowWarLayer((v) => !v)}
+            allStructureNames={ALL_STRUCTURE_NAMES}
+            hiddenStructureNames={hiddenStructureNames}
+            onToggleStructureName={toggleStructureName}
+            onToggleCategory={toggleCategory}
+            onShowAll={showAllStructures}
+            onHideAll={hideAllStructures}
+          />
+        </div>
       </div>
 
       {/* Spinner keyframes */}

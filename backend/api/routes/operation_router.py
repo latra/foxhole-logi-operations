@@ -25,6 +25,7 @@ from schemas.operation import (
 )
 from schemas.group import GroupResponse
 from services.operation_plan_hub import plan_hub
+from ws_manager import operations_ws_manager
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 
@@ -59,6 +60,18 @@ async def _user_group_ids(db: AsyncSession, user_id: str) -> list[str]:
 async def _invited_group_ids(db: AsyncSession, operation_id: str) -> list[str]:
     """Group IDs invited to an operation (includes the creator's group)."""
     return [inv.group_id for inv in await invite_repo.list_by_operation(db, operation_id)]
+
+
+async def _broadcast_operation_event(db: AsyncSession, operation_id: str, group_id: str) -> None:
+    """Notify everyone who can see this operation (its creator group plus
+    any invited groups) that it changed — created, updated, cancelled,
+    invited/uninvited, or deleted. The client just refetches on receipt."""
+    group_ids = await _invited_group_ids(db, operation_id)
+    if group_id not in group_ids:
+        group_ids = [*group_ids, group_id]
+    await operations_ws_manager.broadcast_to_groups(
+        group_ids, {"event": "operation_changed", "operation_id": operation_id}
+    )
 
 
 async def _can_edit_plan(db: AsyncSession, user_id: str, invited_group_ids: list[str]) -> bool:
@@ -185,6 +198,7 @@ async def create_operation(
             await invite_repo.create(db, operation_id=op.id, group_id=gid)
 
     await db.commit()
+    await _broadcast_operation_event(db, op.id, op.group_id)
 
     # Re-fetch with invites loaded
     op = await operation_repo.get_with_invites(db, op.id)
@@ -208,6 +222,7 @@ async def update_operation(
         data["status"] = data["status"].value
     op = await operation_repo.update(db, operation_id, **data)
     await db.commit()
+    await _broadcast_operation_event(db, op.id, op.group_id)
 
     op = await operation_repo.get_with_invites(db, op.id)
     return _build_response(op)
@@ -224,9 +239,18 @@ async def delete_operation(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Operation not found")
     await _require_officer(db, current_user.id, op.group_id)
 
+    # Capture before delete — invites cascade-delete with the operation, so
+    # they wouldn't be there to look up afterward.
+    group_ids = await _invited_group_ids(db, operation_id)
+    if op.group_id not in group_ids:
+        group_ids = [*group_ids, op.group_id]
+
     if not await operation_repo.delete(db, operation_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Operation not found")
     await db.commit()
+    await operations_ws_manager.broadcast_to_groups(
+        group_ids, {"event": "operation_changed", "operation_id": operation_id}
+    )
 
 
 # ── Group invites ──────────────────────────────────────────────────────
@@ -265,6 +289,7 @@ async def add_invites(
         inv = await invite_repo.create(db, operation_id=operation_id, group_id=gid)
         created.append(inv)
     await db.commit()
+    await _broadcast_operation_event(db, operation_id, op.group_id)
     return created
 
 
@@ -292,9 +317,17 @@ async def remove_invite(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Operation not found")
     await _require_officer(db, current_user.id, op.group_id)
 
+    # Capture before removal so the group losing access still hears about it.
+    notify_group_ids = await _invited_group_ids(db, operation_id)
+    if op.group_id not in notify_group_ids:
+        notify_group_ids = [*notify_group_ids, op.group_id]
+
     if not await invite_repo.delete_by_operation_and_group(db, operation_id, group_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Invite not found")
     await db.commit()
+    await operations_ws_manager.broadcast_to_groups(
+        notify_group_ids, {"event": "operation_changed", "operation_id": operation_id}
+    )
 
 
 # ── Signups ────────────────────────────────────────────────────────────
@@ -356,6 +389,9 @@ async def create_signup(
         status=body.status.value,
     )
     await db.commit()
+    await operations_ws_manager.broadcast_to_groups(
+        invited_group_ids, {"event": "operation_changed", "operation_id": operation_id}
+    )
 
     # Re-fetch with user loaded
     signup = await signup_repo.get_by_operation_and_user(db, operation_id, current_user.id)
@@ -384,6 +420,10 @@ async def update_signup(
     if not signup:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Signup not found")
     await db.commit()
+    await operations_ws_manager.broadcast_to_groups(
+        await _invited_group_ids(db, operation_id),
+        {"event": "operation_changed", "operation_id": operation_id},
+    )
     return signup
 
 
@@ -397,6 +437,43 @@ async def delete_signup(
     if not await signup_repo.delete(db, signup_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Signup not found")
     await db.commit()
+    await operations_ws_manager.broadcast_to_groups(
+        await _invited_group_ids(db, operation_id),
+        {"event": "operation_changed", "operation_id": operation_id},
+    )
+
+
+# ── Live operations list (WebSocket) ─────────────────────────────────────
+#
+# One connection per user session on the Operations page — joined into a
+# room per ACTIVE group membership at connect time. Any operation create /
+# update (including cancel) / delete / invite change is broadcast to the
+# rooms of every group that can see that operation, so the list and any
+# open detail view refresh themselves without an F5. The client is expected
+# to send a `{"kind": "ping"}` roughly every 20s; this keeps the socket
+# alive through idle-connection timeouts and, if the client stops hearing
+# a `pong` back, it treats the connection as dead and reconnects.
+
+@router.websocket("/ws")
+async def operations_ws(websocket: WebSocket, token: str = Query(...)):
+    async with AsyncSessionLocal() as db:
+        user = await get_user_from_token(token, db)
+        if not user:
+            await websocket.close(code=1008)
+            return
+
+        group_ids = await _user_group_ids(db, user.id)
+
+        await operations_ws_manager.connect(group_ids, websocket)
+        try:
+            while True:
+                msg = await websocket.receive_json()
+                if msg.get("kind") == "ping":
+                    await websocket.send_json({"kind": "pong"})
+        except WebSocketDisconnect:
+            pass
+        finally:
+            operations_ws_manager.disconnect(websocket)
 
 
 # ── Live operation plan (WebSocket) ─────────────────────────────────────
