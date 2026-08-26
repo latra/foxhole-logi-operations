@@ -25,6 +25,9 @@ const STRUCTURE_LABEL: Record<string, string> = {
   BUNKER_BASE: "Bunker Base",
   KEEP: "Keep",
   TOWN_BASE: "Town Base",
+  RELIC_BASE: "Relic Base",
+  BORDER_BASE: "Border Base",
+  AIRCRAFT_DEPOT: "Aircraft Depot"
 };
 
 export default function StockpilesPage() {
@@ -116,8 +119,12 @@ export default function StockpilesPage() {
       toastError("No active war found. Can't create a stockpile right now.");
       return;
     }
-    if (!regionTrimmed || !name.trim() || !code.trim()) {
+    if (!regionTrimmed || !name.trim()) {
       toastError("Please fill in name, region and code.");
+      return;
+    }
+    if ((structureType === StockpileStructure.STORAGE_DEPOT || regionTrimmed === StockpileStructure.SEAPORT) && code.trim().length !== 6) {
+      toastError("Please fill in code.");
       return;
     }
     setCreating(true);
@@ -142,7 +149,7 @@ export default function StockpilesPage() {
       war_id: war.id,
       region_id: region.id,
       structure_type: structureType,
-      code_6digit: code.trim(),
+      code_6digit: code.trim() ? code.trim() : "",
       name: name.trim(),
       type,
       notes: notes.trim() || null,
@@ -463,7 +470,7 @@ export default function StockpilesPage() {
             <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: 12, color: "var(--color-text-dim)" }}>
-                  Code (up to 6 digits) *
+                  Code (up to 6 digits)
                 </label>
                 <input
                   type="text"
@@ -515,7 +522,7 @@ export default function StockpilesPage() {
               <button
                 className="btn btn-small"
                 onClick={handleCreate}
-                disabled={creating || !name.trim() || !code.trim() || !regionInput.trim()}
+                disabled={creating || !name.trim() || !regionInput.trim()}
               >
                 {creating ? "Creating..." : "Create Stockpile"}
               </button>

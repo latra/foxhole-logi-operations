@@ -209,7 +209,7 @@ export default function LinkedLogisticsLists({ operation, canManage }: Props) {
                   <i className="material-icons left" style={{ fontSize: 14 }}>
                     link
                   </i>
-                  Link
+                  Save
                 </button>
               </div>
             )}

@@ -74,8 +74,13 @@ async def _broadcast_operation_event(db: AsyncSession, operation_id: str, group_
     )
 
 
-async def _can_edit_plan(db: AsyncSession, user_id: str, invited_group_ids: list[str]) -> bool:
-    """True if the user is an ACTIVE OWNER/OFFICER in any invited group."""
+async def _can_manage_operation(db: AsyncSession, user_id: str, invited_group_ids: list[str]) -> bool:
+    """True if the user is an ACTIVE OWNER/OFFICER in any invited group.
+
+    Used both to gate editing an operation's own details and to gate
+    editing its live plan — any officer/owner of a group involved in the
+    operation (creator or invited) can manage it, not just the creator
+    group's officers."""
     for gid in invited_group_ids:
         m = await membership_repo.get_by_group_and_user(db, gid, user_id)
         if m and m.status == MembershipStatus.ACTIVE.value and m.role in _OFFICER_ROLES:
@@ -215,7 +220,13 @@ async def update_operation(
     op = await operation_repo.get_by_id(db, operation_id)
     if not op:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Operation not found")
-    await _require_officer(db, current_user.id, op.group_id)
+
+    invited_group_ids = await _invited_group_ids(db, operation_id)
+    if not await _can_manage_operation(db, current_user.id, invited_group_ids):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Only Officers or Owners of an invited group can edit this operation.",
+        )
 
     data = body.model_dump(exclude_unset=True)
     if "status" in data and data["status"] is not None:
@@ -501,7 +512,7 @@ async def plan_ws(websocket: WebSocket, operation_id: str, token: str = Query(..
             await websocket.close(code=1008)
             return
 
-        can_edit = await _can_edit_plan(db, user.id, invited_group_ids)
+        can_edit = await _can_manage_operation(db, user.id, invited_group_ids)
 
         await websocket.accept()
         plan_hub.join(operation_id, websocket)
@@ -513,7 +524,7 @@ async def plan_ws(websocket: WebSocket, operation_id: str, token: str = Query(..
                 msg = await websocket.receive_json()
                 kind = msg.get("kind")
 
-                if kind not in ("shape-add", "shape-remove", "undo", "clear-all"):
+                if kind not in ("shape-add", "shape-update", "shape-remove", "undo", "clear-all"):
                     continue
 
                 if not can_edit:
@@ -528,6 +539,17 @@ async def plan_ws(websocket: WebSocket, operation_id: str, token: str = Query(..
                     except Exception:
                         continue
                     shapes.append(shape)
+                elif kind == "shape-update":
+                    try:
+                        shape = PlanShape(**msg["shape"]).model_dump()
+                    except Exception:
+                        continue
+                    for i, s in enumerate(shapes):
+                        if s["id"] == shape["id"]:
+                            shapes[i] = shape
+                            break
+                    else:
+                        continue
                 elif kind in ("shape-remove", "undo"):
                     shape_id = msg.get("shapeId")
                     shapes[:] = [s for s in shapes if s["id"] != shape_id]

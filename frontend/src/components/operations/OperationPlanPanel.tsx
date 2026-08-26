@@ -1,11 +1,15 @@
 /* ── Live, collaborative operation plan viewer/editor ─────────────── */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import MapCanvas from "../map/MapCanvas";
-import type { MapShape, ShapeType } from "../map/mapTypes";
+import type { MapCanvasHandle } from "../map/MapCanvas";
+import type { MapShape, ToolMode } from "../map/mapTypes";
+import { generateId } from "../map/mapTypes";
 import { useOperationPlanStore } from "./planStore";
 import { useOperationPlanSocket } from "./useOperationPlanSocket";
 import { TOOLS, COLORS, STROKE_WIDTHS } from "./PlanMapEditor";
+import { getMapSession } from "../../api/map";
+import { toastSuccess, toastError } from "../common/Toast";
 
 interface Props {
   operationId: string;
@@ -67,15 +71,30 @@ export default function OperationPlanPanel({ operationId, canEdit, peerId }: Pro
 
 /* Only mounted while expanded — this is what owns the socket lifetime. */
 function LivePlanEditor({ operationId, canEdit, peerId }: Props) {
-  const [activeTool, setActiveTool] = useState<ShapeType>("arrow");
+  const [activeTool, setActiveTool] = useState<ToolMode>("arrow");
   const [activeColor, setActiveColor] = useState(COLORS[0]);
   const [strokeWidth, setStrokeWidth] = useState(3);
+  const [showDistances, setShowDistances] = useState(false);
+  const [mapCode, setMapCode] = useState("");
+  const [loadingMap, setLoadingMap] = useState(false);
+  const mapCanvasRef = useRef<MapCanvasHandle>(null);
 
-  const { status, errorMessage, sendShape, sendUndo, sendClear } = useOperationPlanSocket(operationId);
+  const { status, errorMessage, sendShape, sendShapeUpdate, sendShapeRemove, sendUndo, sendClear } =
+    useOperationPlanSocket(operationId);
 
   const handleShapeAdded = useCallback(
     (shape: MapShape) => sendShape(shape),
     [sendShape]
+  );
+
+  const handleShapeUpdated = useCallback(
+    (shape: MapShape) => sendShapeUpdate(shape),
+    [sendShapeUpdate]
+  );
+
+  const handleShapeRemoved = useCallback(
+    (shapeId: string) => sendShapeRemove(shapeId),
+    [sendShapeRemove]
   );
 
   const handleUndo = useCallback(() => {
@@ -87,6 +106,33 @@ function LivePlanEditor({ operationId, canEdit, peerId }: Props) {
     useOperationPlanStore.getState().clearAll();
     sendClear();
   }, [sendClear]);
+
+  const handleExportPng = useCallback(() => {
+    mapCanvasRef.current?.exportPNG();
+  }, []);
+
+  /** Import another map's shapes into this (already live) plan — appended
+   *  alongside whatever's already here, broadcast to everyone connected,
+   *  rather than replacing what the group has already drawn. */
+  const handleLoadMap = useCallback(async () => {
+    const code = mapCode.trim();
+    if (!code) return;
+    setLoadingMap(true);
+    try {
+      const session = await getMapSession(code.toUpperCase());
+      const shapes = (session.shapes ?? []).map((s) => ({ ...s, id: generateId(), author: peerId }));
+      for (const shape of shapes) {
+        useOperationPlanStore.getState().addShape(shape);
+        sendShape(shape);
+      }
+      toastSuccess(`Imported ${shapes.length} shape${shapes.length === 1 ? "" : "s"} from map ${code.toUpperCase()}`);
+      setMapCode("");
+    } catch {
+      toastError("Map not found. Check the code and try again.");
+    } finally {
+      setLoadingMap(false);
+    }
+  }, [mapCode, peerId, sendShape]);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -128,6 +174,23 @@ function LivePlanEditor({ operationId, canEdit, peerId }: Props) {
             flexWrap: "wrap",
           }}
         >
+          <button
+            className="btn-flat"
+            title="Select (move, resize, rotate, delete a shape)"
+            style={{
+              width: 30, height: 30, padding: 0, minWidth: "auto",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 4,
+              background: activeTool === "select" ? "rgba(36,86,130,0.25)" : "transparent",
+              color: activeTool === "select" ? "var(--color-light)" : "var(--color-text-dim)",
+            }}
+            onClick={() => setActiveTool("select")}
+          >
+            <i className="material-icons" style={{ fontSize: 16 }}>touch_app</i>
+          </button>
+
+          <span style={{ width: 1, height: 20, background: "rgba(219,218,216,0.12)" }} />
+
           {TOOLS.map((t) => (
             <button
               key={t.type}
@@ -198,6 +261,55 @@ function LivePlanEditor({ operationId, canEdit, peerId }: Props) {
           >
             <i className="material-icons" style={{ fontSize: 16 }}>delete_outline</i>
           </button>
+          <button
+            className="btn-flat"
+            title="Export as PNG"
+            style={{ width: 30, height: 30, padding: 0, minWidth: "auto", color: "var(--color-text-dim)" }}
+            onClick={handleExportPng}
+          >
+            <i className="material-icons" style={{ fontSize: 16 }}>download</i>
+          </button>
+          <button
+            className="btn-flat"
+            title={`${showDistances ? "Hide" : "Show"} distances on every line/arrow`}
+            style={{
+              width: 30, height: 30, padding: 0, minWidth: "auto",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 4,
+              background: showDistances ? "rgba(36,86,130,0.25)" : "transparent",
+              color: showDistances ? "var(--color-light)" : "var(--color-text-dim)",
+            }}
+            onClick={() => setShowDistances((v) => !v)}
+          >
+            <i className="material-icons" style={{ fontSize: 16 }}>straighten</i>
+          </button>
+
+          <span style={{ width: 1, height: 20, background: "rgba(219,218,216,0.12)" }} />
+
+          <input
+            type="text"
+            value={mapCode}
+            onChange={(e) => setMapCode(e.target.value)}
+            placeholder="Map code"
+            maxLength={10}
+            style={{
+              width: 80, fontSize: 12, textTransform: "uppercase",
+              padding: "4px 6px", height: 26, boxSizing: "border-box",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleLoadMap();
+            }}
+          />
+          <button
+            type="button"
+            className="btn-flat"
+            title="Import that map's shapes into this plan"
+            disabled={!mapCode.trim() || loadingMap}
+            onClick={handleLoadMap}
+            style={{ height: 26, fontSize: 11, color: "var(--color-text-dim)" }}
+          >
+            {loadingMap ? "..." : "Import"}
+          </button>
         </div>
       )}
 
@@ -212,13 +324,17 @@ function LivePlanEditor({ operationId, canEdit, peerId }: Props) {
         }}
       >
         <MapCanvas
+          ref={mapCanvasRef}
           activeTool={activeTool}
           activeColor={activeColor}
           strokeWidth={strokeWidth}
           peerId={peerId}
           onShapeAdded={handleShapeAdded}
+          onShapeUpdated={handleShapeUpdated}
+          onShapeRemoved={handleShapeRemoved}
           store={useOperationPlanStore}
           readOnly={!canEdit}
+          showDistances={showDistances}
         />
       </div>
     </div>

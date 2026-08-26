@@ -8,6 +8,7 @@ import type { MapShape } from "../map/mapTypes";
 type PlanMessage =
   | { kind: "full-state"; shapes: MapShape[] }
   | { kind: "shape-add"; shape: MapShape }
+  | { kind: "shape-update"; shape: MapShape }
   | { kind: "shape-remove" | "undo"; shapeId: string }
   | { kind: "clear-all" }
   | { kind: "error"; message: string };
@@ -18,6 +19,8 @@ interface UseOperationPlanSocketReturn {
   status: PlanSocketStatus;
   errorMessage: string | null;
   sendShape: (shape: MapShape) => void;
+  sendShapeUpdate: (shape: MapShape) => void;
+  sendShapeRemove: (shapeId: string) => void;
   sendUndo: (shapeId: string) => void;
   sendClear: () => void;
 }
@@ -28,7 +31,7 @@ export function useOperationPlanSocket(operationId: string): UseOperationPlanSoc
   const [status, setStatus] = useState<PlanSocketStatus>("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { addShape, removeShape, clearAll, loadState } = useOperationPlanStore();
+  const { addShape, updateShape, removeShape, clearAll, loadState } = useOperationPlanStore();
 
   useEffect(() => {
     setStatus("connecting");
@@ -53,6 +56,9 @@ export function useOperationPlanSocket(operationId: string): UseOperationPlanSoc
           break;
         case "shape-add":
           addShape(msg.shape);
+          break;
+        case "shape-update":
+          updateShape(msg.shape.id, msg.shape);
           break;
         case "shape-remove":
         case "undo":
@@ -86,8 +92,10 @@ export function useOperationPlanSocket(operationId: string): UseOperationPlanSoc
   }, []);
 
   const sendShape = useCallback((shape: MapShape) => send({ kind: "shape-add", shape }), [send]);
+  const sendShapeUpdate = useCallback((shape: MapShape) => send({ kind: "shape-update", shape }), [send]);
+  const sendShapeRemove = useCallback((shapeId: string) => send({ kind: "shape-remove", shapeId }), [send]);
   const sendUndo = useCallback((shapeId: string) => send({ kind: "undo", shapeId }), [send]);
   const sendClear = useCallback(() => send({ kind: "clear-all" }), [send]);
 
-  return { status, errorMessage, sendShape, sendUndo, sendClear };
+  return { status, errorMessage, sendShape, sendShapeUpdate, sendShapeRemove, sendUndo, sendClear };
 }

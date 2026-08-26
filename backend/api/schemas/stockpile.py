@@ -12,7 +12,7 @@ class StockpileCreate(BaseModel):
     war_id: int
     region_id: int
     structure_type: StockpileStructure
-    code_6digit: str = Field(min_length=1, max_length=6)
+    code_6digit: str = Field(max_length=6)
     name: str = Field(min_length=1, max_length=255)
     type: StockpileType = StockpileType.PRIVATE
     notes: str | None = None
@@ -26,7 +26,7 @@ class StockpileCreate(BaseModel):
 class StockpileUpdate(BaseModel):
     region_id: int | None = None
     structure_type: StockpileStructure | None = None
-    code_6digit: str | None = Field(default=None, min_length=1, max_length=6)
+    code_6digit: str | None = Field(default=None, max_length=6)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     type: StockpileType | None = None
     notes: str | None = None

@@ -27,6 +27,7 @@ class MapShapeIn(BaseModel):
 class MapSessionResponse(BaseModel):
     id: str
     code: str
+    shapes: list[MapShapeIn] | None = None
     created_at: datetime
     updated_at: datetime
 

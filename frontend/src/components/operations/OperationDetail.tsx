@@ -12,6 +12,7 @@ import SignupList from "./SignupList";
 import LoadingSpinner from "../common/LoadingSpinner";
 import OperationPlanPanel from "./OperationPlanPanel";
 import LinkedLogisticsLists from "./LinkedLogisticsLists";
+import EditOperationForm from "./EditOperationForm";
 
 interface Props {
   operation: Operation;
@@ -20,7 +21,7 @@ interface Props {
   regions: Region[];
   currentUserId: string;
   isOfficer: boolean;
-  canEditPlan: boolean;
+  canEditOperation: boolean;
   onSignupChanged: () => void;
   onOperationUpdated: () => void;
 }
@@ -32,7 +33,7 @@ export default function OperationDetail({
   regions,
   currentUserId,
   isOfficer,
-  canEditPlan,
+  canEditOperation,
   onSignupChanged,
   onOperationUpdated,
 }: Props) {
@@ -49,6 +50,7 @@ export default function OperationDetail({
 
   const [confirmAction, setConfirmAction] = useState<"COMPLETED" | "CANCELLED" | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [editingOperation, setEditingOperation] = useState(false);
 
   // Debrief state
   const [debriefText, setDebriefText] = useState(operation.debrief ?? "");
@@ -62,6 +64,7 @@ export default function OperationDetail({
   useEffect(() => {
     setDebriefText(operation.debrief ?? "");
     setShowDebriefEditor(false);
+    setEditingOperation(false);
   }, [operation.id, operation.debrief]);
 
   const isCreator = operation.created_by === currentUserId;
@@ -123,9 +126,31 @@ export default function OperationDetail({
               fontWeight: 500,
               color: "var(--color-light)",
               margin: "0 0 4px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
             }}
           >
             {operation.name}
+            {canEditOperation && !editingOperation && (
+              <button
+                className="btn-flat"
+                title="Edit operation"
+                onClick={() => setEditingOperation(true)}
+                style={{
+                  padding: 0,
+                  width: 22,
+                  height: 22,
+                  minWidth: "auto",
+                  color: "var(--color-text-dim)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <i className="material-icons" style={{ fontSize: 16 }}>edit</i>
+              </button>
+            )}
           </h2>
           <StatusBadge status={operation.status} />
         </div>
@@ -136,6 +161,18 @@ export default function OperationDetail({
         />
       </div>
 
+      {editingOperation ? (
+        <EditOperationForm
+          operation={operation}
+          regions={regions}
+          onSaved={() => {
+            setEditingOperation(false);
+            onOperationUpdated();
+          }}
+          onCancel={() => setEditingOperation(false)}
+        />
+      ) : (
+      <>
       {/* Info grid */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-content">
@@ -228,6 +265,8 @@ export default function OperationDetail({
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* Linked logistics lists */}
       <LinkedLogisticsLists operation={operation} canManage={canManage} />
@@ -401,7 +440,7 @@ export default function OperationDetail({
       {/* Operation Plan (live, collaborative) */}
       <OperationPlanPanel
         operationId={operation.id}
-        canEdit={canEditPlan}
+        canEdit={canEditOperation}
         peerId={currentUserId}
       />
 

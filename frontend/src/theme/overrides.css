@@ -164,6 +164,27 @@ a:hover {
   font-family: var(--font-stack);
   font-size: 14px;
   transition: border-color var(--transition);
+  /* Fill whatever container/column/flex-cell they're in by default, and —
+     critically — allow shrinking below the intrinsic content width that
+     flex/grid items otherwise refuse to go under (their initial min-width
+     is "auto", i.e. min-content). Without this, a datetime-local or number
+     input's fairly wide native min-content size pushes it past a narrow
+     grid column or sidebar and it visibly overflows to the right. None
+     of this is `!important`, so an element with an explicit inline
+     `style={{ width }}` still overrides it (inline style always beats a
+     class/attribute selector here) — intentionally fixed-width fields
+     (e.g. a short map-code box) are unaffected. */
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  /* Materialize's own (non-`!important`) rule for these input types sets
+     `box-sizing: content-box` at a specificity that otherwise beats the
+     global `*{box-sizing:border-box}` reset above — so without forcing it
+     here too, `width:100%` plus this rule's own padding/border added on
+     top pushes every one of these inputs past its container by exactly
+     that padding+border amount. This is the actual cause of inputs
+     overflowing to the right. */
+  box-sizing: border-box !important;
 }
 .foxhole-app input:focus,
 .foxhole-app textarea:focus,
@@ -252,6 +273,11 @@ a:hover {
 /* ── Form field wrapper ────────────────────────────────────────────── */
 .foxhole-app .form-field {
   margin-bottom: 16px;
+  /* Same reasoning as the input rule above: as a flex/grid child (e.g. the
+     "When" / "Duration" two-column rows), this must be allowed to shrink
+     below its content's natural min width instead of forcing the row wider
+     than its container. */
+  min-width: 0;
 }
 .foxhole-app .form-field .field-error {
   color: var(--color-danger);

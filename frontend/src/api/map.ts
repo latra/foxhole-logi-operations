@@ -1,10 +1,12 @@
 /* ── Collaborative map session API (REST) ─────────────────────────── */
 
 import client from "./client";
+import type { MapShape } from "../components/map/mapTypes";
 
 export interface MapSessionInfo {
   id: string;
   code: string;
+  shapes: MapShape[] | null;
   created_at: string;
   updated_at: string;
 }

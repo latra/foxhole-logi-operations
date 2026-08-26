@@ -23,6 +23,7 @@ class PlanShape(BaseModel):
     strokeWidth: float
     text: str | None = None
     author: str
+    rotation: float | None = None
 
 
 # --- Operation ---

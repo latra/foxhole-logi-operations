@@ -66,11 +66,12 @@ export default function OperationsPage() {
     selectedOpGroupMembership?.role === "OWNER" ||
     selectedOpGroupMembership?.role === "OFFICER";
 
-  // Plan editing is broader: Officer/Owner in ANY invited group (not just the creator group)
+  // Editing the operation (details + plan) is broader than status changes:
+  // Officer/Owner in ANY invited group, not just the creator group.
   const invitedGroupIds = selectedOperation
     ? new Set(selectedOperation.invited_groups.map((g) => g.id).concat(selectedOperation.group_id))
     : new Set<string>();
-  const canEditPlan = memberships.some(
+  const canEditOperation = memberships.some(
     (m) =>
       m.status === "ACTIVE" &&
       (m.role === "OWNER" || m.role === "OFFICER") &&
@@ -285,7 +286,7 @@ export default function OperationsPage() {
               regions={regions}
               currentUserId={user.id}
               isOfficer={isOfficerForSelectedOp}
-              canEditPlan={canEditPlan}
+              canEditOperation={canEditOperation}
               onSignupChanged={handleSignupChanged}
               onOperationUpdated={handleOperationUpdated}
             />
