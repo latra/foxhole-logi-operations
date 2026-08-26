@@ -1,3 +1,5 @@
+"""Application configuration — YAML + environment variables."""
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +21,7 @@ def _load_yaml() -> dict:
 
 @dataclass
 class AppConfig:
-    name: str = "FastAPI Backend"
+    name: str = "Foxhole Logi Ops"
 
 
 @dataclass
@@ -27,7 +29,7 @@ class DatabaseConfig:
     type: str = "sqlite"
     host: str = "localhost"
     port: int = 5432
-    database: str = "postgres"
+    database: str = "foxhole_logi"
     # Sensitive — from env
     user: str = field(default_factory=lambda: os.getenv("POSTGRES_USER", "postgres"))
     password: str = field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD", "postgres"))
@@ -50,12 +52,23 @@ class AuthConfig:
 
 
 @dataclass
-class GoogleOAuthConfig:
-    enabled: bool = False
+class DiscordOAuthConfig:
+    enabled: bool = True
     # Sensitive — from env
-    client_id: str = field(default_factory=lambda: os.getenv("GOOGLE_CLIENT_ID", ""))
-    client_secret: str = field(default_factory=lambda: os.getenv("GOOGLE_CLIENT_SECRET", ""))
-    redirect_uri: str = field(default_factory=lambda: os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback"))
+    client_id: str = field(default_factory=lambda: os.getenv("DISCORD_CLIENT_ID", ""))
+    client_secret: str = field(default_factory=lambda: os.getenv("DISCORD_CLIENT_SECRET", ""))
+    redirect_uri: str = field(
+        default_factory=lambda: os.getenv(
+            "DISCORD_REDIRECT_URI", "http://localhost:8000/auth/discord/callback"
+        )
+    )
+
+
+@dataclass
+class FrontendConfig:
+    url: str = field(
+        default_factory=lambda: os.getenv("FRONTEND_URL", "http://localhost:5173")
+    )
 
 
 @dataclass
@@ -68,7 +81,8 @@ class Settings:
     app: AppConfig = field(default_factory=AppConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
-    google: GoogleOAuthConfig = field(default_factory=GoogleOAuthConfig)
+    discord: DiscordOAuthConfig = field(default_factory=DiscordOAuthConfig)
+    frontend: FrontendConfig = field(default_factory=FrontendConfig)
     cors: CorsConfig = field(default_factory=CorsConfig)
 
     @classmethod
@@ -82,7 +96,7 @@ class Settings:
             type=db_raw.get("type", "sqlite"),
             host=db_raw.get("host", "localhost"),
             port=int(db_raw.get("port", 5432)),
-            database=db_raw.get("database", "postgres"),
+            database=db_raw.get("database", "foxhole_logi"),
         )
 
         auth_raw = raw.get("auth", {})
@@ -92,20 +106,30 @@ class Settings:
             ),
         )
 
-        google_raw = raw.get("google", {})
-        google_cfg = GoogleOAuthConfig(
-            enabled=bool(google_raw.get("enabled", False)),
+        discord_raw = raw.get("discord", {})
+        discord_cfg = DiscordOAuthConfig(
+            enabled=bool(discord_raw.get("enabled", True)),
         )
 
         cors_raw = raw.get("cors", {})
         origins_env = os.getenv("ALLOWED_ORIGINS")
         if origins_env:
-            origins = ["*"] if origins_env.strip() == "*" else [o.strip() for o in origins_env.split(",")]
+            origins = (
+                ["*"]
+                if origins_env.strip() == "*"
+                else [o.strip() for o in origins_env.split(",")]
+            )
         else:
             origins = cors_raw.get("allowed_origins", ["*"])
         cors_cfg = CorsConfig(allowed_origins=origins)
 
-        return cls(app=app_cfg, database=db_cfg, auth=auth_cfg, google=google_cfg, cors=cors_cfg)
+        return cls(
+            app=app_cfg,
+            database=db_cfg,
+            auth=auth_cfg,
+            discord=discord_cfg,
+            cors=cors_cfg,
+        )
 
 
 settings = Settings.load()

@@ -1,64 +1,59 @@
+"""User repository with Discord-specific lookups."""
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import User
+from models.group import User
+from repositories.base_repository import BaseRepository
 
 
-async def get_by_email(db: AsyncSession, email: str) -> User | None:
-    return await db.scalar(select(User).where(User.email == email))
+class UserRepository(BaseRepository[User]):
+    def __init__(self):
+        super().__init__(User)
 
-
-async def get_by_google_id(db: AsyncSession, google_id: str) -> User | None:
-    return await db.scalar(select(User).where(User.google_id == google_id))
-
-
-async def create(
-    db: AsyncSession,
-    *,
-    name: str,
-    email: str,
-    hashed_password: str | None = None,
-    profile_picture: str | None = None,
-    google_id: str | None = None,
-) -> User:
-    user = User(
-        name=name,
-        email=email,
-        hashed_password=hashed_password,
-        profile_picture=profile_picture,
-        google_id=google_id,
-    )
-    db.add(user)
-    await db.flush()
-    return user
-
-
-async def upsert_google_user(
-    db: AsyncSession,
-    *,
-    google_id: str,
-    email: str,
-    name: str,
-    profile_picture: str | None,
-) -> User:
-    user = await get_by_google_id(db, google_id)
-    if user is None:
-        user = await get_by_email(db, email)
-
-    if user is None:
-        user = await create(
-            db,
-            name=name,
-            email=email,
-            profile_picture=profile_picture,
-            google_id=google_id,
+    async def get_by_discord_id(self, db: AsyncSession, discord_id: str) -> User | None:
+        result = await db.execute(
+            select(User).where(User.discord_id == discord_id)
         )
-    else:
-        # Link google_id if this email was already registered via password
-        if user.google_id is None:
-            user.google_id = google_id
-        if profile_picture and not user.profile_picture:
-            user.profile_picture = profile_picture
+        return result.scalar_one_or_none()
 
-    await db.flush()
-    return user
+    async def upsert_discord_user(
+        self,
+        db: AsyncSession,
+        *,
+        discord_id: str,
+        username: str,
+        display_name: str,
+        avatar_url: str | None = None,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+        token_expires_at=None,
+    ) -> User:
+        user = await self.get_by_discord_id(db, discord_id)
+        if user is None:
+            user = await self.create(
+                db,
+                discord_id=discord_id,
+                username=username,
+                display_name=display_name,
+                avatar_url=avatar_url,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_expires_at=token_expires_at,
+            )
+        else:
+            user.username = username
+            user.display_name = display_name
+            if avatar_url:
+                user.avatar_url = avatar_url
+            if access_token:
+                user.access_token = access_token
+            if refresh_token:
+                user.refresh_token = refresh_token
+            if token_expires_at:
+                user.token_expires_at = token_expires_at
+            await db.flush()
+        return user
+
+
+user_repo = UserRepository()

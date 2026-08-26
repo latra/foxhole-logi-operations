@@ -1,0 +1,260 @@
+/* ── Foxhole Logi Ops — Materialize Dark Overrides ────────────────── */
+@import "./tokens.css";
+
+/* ── Reset & Base ──────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-stack);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-secondary);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+a:hover {
+  color: var(--color-light);
+}
+
+/* ── Navbar ────────────────────────────────────────────────────────── */
+.foxhole-app nav {
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+  border-bottom: var(--border-subtle);
+  height: 44px;
+  line-height: 44px;
+}
+.foxhole-app nav .brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-light);
+  padding-left: 16px;
+}
+.foxhole-app nav .brand-logo img {
+  height: 26px;
+  width: auto;
+}
+.foxhole-app nav ul a {
+  color: var(--color-text-dim);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color var(--transition);
+}
+.foxhole-app nav ul a:hover {
+  color: var(--color-light);
+  background: transparent;
+}
+.foxhole-app nav ul a.active {
+  color: var(--color-light);
+  border-bottom: 2px solid var(--color-primary);
+}
+.foxhole-app nav ul li {
+  height: 44px;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.foxhole-app .btn,
+.foxhole-app .btn-flat {
+  box-shadow: none !important;
+  border-radius: var(--radius);
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  transition: background var(--transition), opacity var(--transition);
+}
+.foxhole-app .btn {
+  background: var(--color-primary);
+  color: var(--color-light);
+}
+.foxhole-app .btn:hover {
+  background: var(--color-primary);
+  opacity: 0.9;
+}
+.foxhole-app .btn:focus {
+  background: var(--color-primary);
+}
+.foxhole-app .btn.btn-secondary {
+  background: transparent;
+  color: var(--color-secondary);
+  border: 1px solid rgba(91, 128, 160, 0.3);
+}
+.foxhole-app .btn.btn-secondary:hover {
+  background: rgba(91, 128, 160, 0.08);
+  opacity: 1;
+}
+.foxhole-app .btn.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-light);
+}
+.foxhole-app .btn.btn-discord {
+  background: var(--color-discord);
+  color: #fff;
+}
+.foxhole-app .btn.btn-discord:hover {
+  background: var(--color-discord);
+  opacity: 0.9;
+}
+.foxhole-app .btn.btn-small {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 14px;
+  font-size: 11px;
+}
+.foxhole-app .btn:disabled,
+.foxhole-app .btn.disabled {
+  background: var(--color-surface-alt) !important;
+  color: var(--color-text-dim) !important;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────── */
+.foxhole-app .card {
+  background: var(--color-surface);
+  border: var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: none;
+  margin: 0;
+}
+.foxhole-app .card .card-content {
+  padding: 16px;
+  color: var(--color-text);
+}
+.foxhole-app .card .card-title {
+  color: var(--color-light);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* ── Inputs ────────────────────────────────────────────────────────── */
+.foxhole-app input[type="text"],
+.foxhole-app input[type="number"],
+.foxhole-app input[type="email"],
+.foxhole-app input[type="password"],
+.foxhole-app input[type="datetime-local"],
+.foxhole-app textarea,
+.foxhole-app select {
+  background: var(--color-surface-alt) !important;
+  border: var(--border-input) !important;
+  border-radius: var(--radius) !important;
+  color: var(--color-text) !important;
+  padding: 8px 12px !important;
+  height: auto !important;
+  margin: 0 !important;
+  font-family: var(--font-stack);
+  font-size: 14px;
+  transition: border-color var(--transition);
+}
+.foxhole-app input:focus,
+.foxhole-app textarea:focus,
+.foxhole-app select:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: none !important;
+  outline: none;
+}
+.foxhole-app input::placeholder,
+.foxhole-app textarea::placeholder {
+  color: var(--color-text-dim);
+}
+.foxhole-app label {
+  color: var(--color-text-dim) !important;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ── Select (browser-default) ──────────────────────────────────────── */
+.foxhole-app select.browser-default {
+  background: var(--color-surface-alt) !important;
+  border: var(--border-input) !important;
+  border-radius: var(--radius) !important;
+  color: var(--color-text) !important;
+  padding: 8px 12px !important;
+  height: auto !important;
+  font-size: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.foxhole-app select.browser-default option {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ── Toasts ────────────────────────────────────────────────────────── */
+.foxhole-toast {
+  background: var(--color-surface) !important;
+  color: var(--color-light) !important;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.foxhole-toast.toast-success {
+  border-left: 3px solid var(--color-success);
+}
+.foxhole-toast.toast-error {
+  border-left: 3px solid var(--color-danger);
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────── */
+.foxhole-app .section-heading {
+  color: var(--color-text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+
+.foxhole-app .page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  padding-top: 68px; /* navbar offset */
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-alt);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-dim);
+}
+
+/* ── Form field wrapper ────────────────────────────────────────────── */
+.foxhole-app .form-field {
+  margin-bottom: 16px;
+}
+.foxhole-app .form-field .field-error {
+  color: var(--color-danger);
+  font-size: 12px;
+  margin-top: 4px;
+}

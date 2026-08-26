@@ -1,0 +1,23 @@
+/* ── Foxhole Logi Ops — Design Tokens ─────────────────────────────── */
+
+:root {
+  --color-primary: #245682;
+  --color-secondary: #5b80a0;
+  --color-light: #dbdad8;
+  --color-bg: #1a1a1a;
+  --color-surface: #242424;
+  --color-surface-alt: #2e2e2e;
+  --color-text: #dbdad8;
+  --color-text-dim: #8a8a8a;
+  --color-danger: #b33a3a;
+  --color-success: #3a7d44;
+  --color-warning: #c49b2a;
+  --color-discord: #5865f2;
+
+  --radius: 4px;
+  --border-subtle: 1px solid rgba(219, 218, 216, 0.08);
+  --border-input: 1px solid rgba(219, 218, 216, 0.12);
+  --transition: 150ms ease;
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+}
